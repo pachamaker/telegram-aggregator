@@ -20,6 +20,7 @@ from .review import Review
 from .rules import fingerprint
 from .runtime import (RATE_LIMITS, confirm, fetch_posts, legacy_keys, refresh_sources, run,
                       source_link, topic_is_open, verify_destination)
+from .setup import _read as read_with_backoff
 from .setup import ensure_category_topic, initialize, list_open_topics, resolve_group
 from .store import migrate_v1, open_db, seed_sources, setting, validate_config
 
@@ -193,7 +194,7 @@ async def connected(args, db, config):
                     unavailable.append(row["channel_id"])
                     continue
                 try:
-                    await client.get_messages(peer, limit=1)
+                    await read_with_backoff(client.get_messages, peer, limit=1)
                 except RATE_LIMITS:
                     raise
                 except errors.RPCError:

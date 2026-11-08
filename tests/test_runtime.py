@@ -1,3 +1,4 @@
+import asyncio
 import json
 import sqlite3
 import tempfile
@@ -6,10 +7,11 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import call, patch
 
 from telethon import errors, functions, types
 
-from aggregator.runtime import Pass, enqueue, recompute_baseline
+from aggregator.runtime import POLL_INTERVAL, Pass, enqueue, recompute_baseline, run
 from aggregator.store import migrate_v1, open_db, seed_sources, validate_config
 
 LEGACY = {"hours": 12, "threshold": 7, "news_topics": ["Новости"], "dedup_hours": 72}
@@ -210,6 +212,37 @@ class RuntimeTest(unittest.IsolatedAsyncioTestCase):
             await self.execute_pass(Slow(a))
         self.assertEqual(self.outcomes()[(100, "[1]", "live")], "pending")
         self.assertGreaterEqual(self.db.execute("SELECT retry_at FROM queue").fetchone()[0], self.now + 60)
+
+    async def test_short_history_flood_wait_does_not_block_delivery(self):
+        posts = [post(100, 1, "Пост в очереди", self.now - 120),
+                 post(100, 2, "Новый пост", self.now - 60)]
+        self.put(100, posts[:1], mode="off")
+
+        class RateLimitedHistory(Telegram):
+            reads = 0
+
+            async def iter_messages(self, peer, *, min_id, reverse):
+                self.reads += 1
+                if self.reads == 1:
+                    raise errors.FloodWaitError(request=None, capture=28)
+                for (channel_id, message_id), message in self.posts.items():
+                    if channel_id == peer.channel_id and message_id > min_id:
+                        yield message
+
+        async def end_after_pass(delay):
+            if delay == POLL_INTERVAL:
+                raise asyncio.CancelledError
+
+        telegram = RateLimitedHistory(posts)
+        with (patch("aggregator.runtime.refresh_sources", return_value=self.peers),
+              patch("aggregator.runtime.asyncio.sleep", side_effect=end_after_pass) as sleep):
+            with self.assertRaises(asyncio.CancelledError):
+                await run(telegram, self.db, {}, GROUP)
+
+        self.assertEqual(sleep.await_args_list, [call(28), call(POLL_INTERVAL)])
+        self.assertEqual(self.outcomes(), {(100, "[1]", "live"): "sent",
+                                          (100, "[2]", "live"): "sent"})
+        self.assertEqual(self.db.execute("SELECT last_id FROM cursors").fetchone()[0], 2)
 
     async def test_cold_start_collects_later_even_if_already_delivered(self):
         a = [post(100, 1, "Пост для калибровки", self.now - 7300, reactions=5)]

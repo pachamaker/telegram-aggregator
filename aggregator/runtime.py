@@ -13,6 +13,7 @@ from statistics import median
 from telethon import errors, functions, types, utils
 
 from .rules import advertising_reason, fingerprint, reaction_availability, reaction_count
+from .setup import _read as read_with_backoff
 from .setup import folder_channels, suggest_channel
 from .store import setting
 
@@ -521,7 +522,7 @@ async def run(client, db, config, group):
                 peer = peers.get(source["channel_id"])
                 if peer:
                     try:
-                        await collect(client, db, source, peer, legacy)
+                        await read_with_backoff(collect, client, db, source, peer, legacy)
                     except RATE_LIMITS:
                         raise
                     except (OSError, asyncio.TimeoutError, errors.RPCError) as exc:
@@ -529,6 +530,7 @@ async def run(client, db, config, group):
             await Pass(client, db, group, peers, config, legacy).run()
         except RATE_LIMITS as exc:
             delay = max(delay, exc.seconds)
+            LOG.warning("Telegram ограничил проход: %s. Повтор через %s с.", type(exc).__name__, delay)
         except (OSError, asyncio.TimeoutError, errors.RPCError) as exc:
             LOG.warning("Опрос отложен: %s", type(exc).__name__)
         LOG.info("Проход завершён. Источников в папке: %s. Пауза: %s с.", len(peers), delay)
