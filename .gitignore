@@ -1,0 +1,44 @@
+# Instance config and local state
+/config.json
+/config.*.json
+!/config.example.json
+/telegram-aggregator.json
+/state/
+/local/
+.env
+.env.*
+!/.env.example
+credentials*.json
+*.session
+*.session-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+v2.lock
+
+# Private exports, backups and archives
+/data/
+/exports/
+/backups/
+/dist/
+ChatExport_*/
+DataExport_*/
+result.json
+telegram-forwarding-check.json
+*.log
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.pem
+*.key
+
+# Local development
+/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store

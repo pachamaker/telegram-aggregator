@@ -1,0 +1,29 @@
+services:
+  aggregator:
+    build: .
+    user: "${AGGREGATOR_UID:-1000}:${AGGREGATOR_GID:-1000}"
+    init: true
+    restart: unless-stopped
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+    environment:
+      TELEGRAM_API_ID: "${TELEGRAM_API_ID:-}"
+      TELEGRAM_API_HASH: "${TELEGRAM_API_HASH:-}"
+      AGGREGATOR_BOT_TOKEN: "${AGGREGATOR_BOT_TOKEN:-}"
+    volumes:
+      - type: bind
+        source: ./config.json
+        target: /config/config.json
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./state
+        target: /state
+        bind:
+          create_host_path: false
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
